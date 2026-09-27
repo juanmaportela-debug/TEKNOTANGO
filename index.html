@@ -69,6 +69,8 @@ h1 em{font-style:normal;color:transparent;-webkit-text-stroke:1.5px var(--bone)}
 .chip{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:5px 9px;border:1px solid var(--line);border-radius:999px;color:var(--dust)}
 .vol{display:flex;align-items:center;gap:10px;grid-column:1/-1;padding-top:6px;border-top:1px solid var(--line)}
 .vol input{flex:1;max-width:180px;accent-color:var(--mostaza)}
+.msg{grid-column:1/-1;margin:0;padding:10px 12px;border-radius:4px;background:rgba(142,32,20,.25);border:1px solid var(--sangre);color:var(--bone);font-size:14px}
+.msg code{font-family:var(--mono);color:var(--mostaza)}
 
 /* sections */
 section{padding-block:40px;border-top:1px solid var(--line)}
@@ -162,6 +164,7 @@ footer{padding-top:28px;border-top:1px solid var(--line);display:flex;justify-co
               <span class="chip">MP3</span><span class="chip">320 kbps</span><span class="chip">44.1 kHz</span>
             </div>
           </div>
+          <p class="msg" id="msg" hidden></p>
         </div>
       </div>
     </div>
@@ -217,7 +220,7 @@ function renderList(){
       <div class="t"><b>${t.title}${isCur?'<span class="eq"><i></i><i></i><i></i></span>':''}</b><span>${t.release}</span></div>
       <span class="d">${t.duration}</span>
       <button class="mini" aria-label="${playing?'Pausar':'Reproducir'} ${t.title}">${playing?PAUSE:PLAY}</button>`;
-    li.addEventListener('click',()=>{ if(i!==current){ load(i); audio.play(); } else toggle(); });
+    li.addEventListener('click',()=>{ if(i!==current){ load(i); play(); } else toggle(); });
     list.appendChild(li);
   });
   for(let k=0;k<SLOTS;k++){
@@ -232,14 +235,37 @@ function renderList(){
   document.getElementById('count').textContent = TRACKS.length + (TRACKS.length===1?' tema publicado':' temas publicados');
 }
 
+/* Busca el MP3 en varias ubicaciones por si se subió en otra carpeta o con otro nombre de mayúsculas */
+let candidates = [], cIdx = 0, wantPlay = false;
+const msg = document.getElementById('msg');
+function sourcesFor(t){
+  const name = t.file.split('/').pop();
+  const list = [t.file, name, 'tracks/'+name.toLowerCase(), name.toLowerCase(), 'Tracks/'+name];
+  return [...new Set(list)];
+}
+function showError(){
+  const t = TRACKS[current];
+  msg.innerHTML = 'No se pudo cargar el audio. Revisá que <code>'+t.file+'</code> esté subido al repo con ese nombre exacto (mayúsculas incluidas) y que abras la página desde GitHub Pages o con la carpeta <code>tracks/</code> al lado del index.html.';
+  msg.hidden = false;
+}
+audio.addEventListener('error',()=>{
+  if(cIdx < candidates.length-1){ cIdx++; audio.src = candidates[cIdx]; if(wantPlay) play(); }
+  else { wantPlay = false; showError(); syncState(); }
+});
+function play(){
+  wantPlay = true;
+  const pr = audio.play();
+  if(pr && pr.catch) pr.catch(err=>{ if(err && err.name==='NotAllowedError'){ wantPlay=false; } });
+}
 function load(i){
   current = i; const t = TRACKS[i];
-  audio.src = t.file;
+  candidates = sourcesFor(t); cIdx = 0; msg.hidden = true;
+  audio.src = candidates[0];
   document.getElementById('npTitle').textContent = t.title;
   tDur.textContent = t.duration; tNow.textContent = '0:00';
   draw(0); renderList();
 }
-function toggle(){ audio.paused ? audio.play() : audio.pause(); }
+function toggle(){ if(audio.paused) play(); else { wantPlay = false; audio.pause(); } }
 
 function syncState(){
   const p = !audio.paused;
